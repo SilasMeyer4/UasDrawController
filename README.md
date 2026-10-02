@@ -2,7 +2,9 @@
 
 > **Disclaimer:** This application was **AI-generated** and is currently **in development**. It is **not intended for general use** at this time. Use at your own risk.
 
-A Flutter-based mobile/desktop controller for the [UasDraw](https://github.com/SilasMeyer4/UasDraw) ROS 2 system. It provides remote control, G-code upload, telemetry and diagnostics over rosbridge WebSocket.
+A Flutter-based mobile/desktop controller for the [UasDraw](https://github.com/SilasMeyer4/uas-draw) ROS 2 system. It provides remote control, G-code upload, telemetry and diagnostics over rosbridge WebSocket.
+
+> Note: The [UasDraw](https://github.com/SilasMeyer4/uas-draw) repository is **private** at the moment.
 
 ## Features
 
