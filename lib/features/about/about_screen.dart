@@ -100,16 +100,20 @@ class _AboutScreenState extends State<AboutScreen> {
                             return;
                           }
                           if (!mounted) return;
+                          final messenger = ScaffoldMessenger.of(context);
+                          final platform = Theme.of(context).platform;
                           if (path != null) {
-                            if (Theme.of(context).platform == TargetPlatform.android) {
+                            if (platform == TargetPlatform.android) {
                               await _updateService.installAndroidApk(path);
-                            } else if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                            } else {
+                              if (!mounted) return;
+                              messenger.showSnackBar(
                                 SnackBar(content: Text('Downloaded: $path')),
                               );
                             }
-                          } else if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                          } else {
+                            if (!mounted) return;
+                            messenger.showSnackBar(
                               const SnackBar(content: Text('Download failed')),
                             );
                           }
