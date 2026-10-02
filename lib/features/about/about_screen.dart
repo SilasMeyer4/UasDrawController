@@ -144,6 +144,14 @@ class _AboutScreenState extends State<AboutScreen> {
             subtitle: Text(_currentVersion.isEmpty ? '...' : _currentVersion),
           ),
           ListTile(
+            title: const Text('GitHub Repository'),
+            subtitle: const Text('https://github.com/SilasMeyer4/UasDrawController'),
+            onTap: () async {
+              await _updateService.openReleasePage('https://github.com/SilasMeyer4/UasDrawController');
+            },
+            trailing: const Icon(Icons.open_in_new),
+          ),
+          ListTile(
             title: const Text('Connection'),
             subtitle: Text(cm.isConnected ? 'Connected' : 'Not connected'),
           ),
