@@ -16,6 +16,7 @@ class _AboutScreenState extends State<AboutScreen> {
   UpdateInfo? _latestUpdate;
   bool _checking = false;
   String? _error;
+  bool _downloading = false;
 
   @override
   void initState() {
@@ -66,7 +67,7 @@ class _AboutScreenState extends State<AboutScreen> {
               if (u.name.isNotEmpty) Text(u.name),
               const SizedBox(height: 12),
               if (hasNewer)
-                const Text('A new release is available on GitHub.'),
+                const Text('A new release is available.'),
               if (!hasNewer) const Text('You are running the latest version.'),
             ],
           ),
@@ -80,7 +81,43 @@ class _AboutScreenState extends State<AboutScreen> {
                 onPressed: () async {
                   await _updateService.openReleasePage(u.htmlUrl);
                 },
-                child: const Text('View on GitHub'),
+                child: const Text('Open Releases'),
+              ),
+            if (hasNewer)
+              FilledButton(
+                onPressed: _downloading
+                    ? null
+                    : () async {
+                        setState(() => _downloading = true);
+                        String? path;
+                        if (Theme.of(context).platform == TargetPlatform.android) {
+                          path = await _updateService.downloadAndroidApk(u);
+                        } else if (Theme.of(context).platform == TargetPlatform.linux) {
+                          path = await _updateService.downloadLinuxTar(u);
+                        }
+                          if (!mounted) {
+                            setState(() => _downloading = false);
+                            return;
+                          }
+                          if (!mounted) return;
+                          if (path != null) {
+                            if (Theme.of(context).platform == TargetPlatform.android) {
+                              await _updateService.installAndroidApk(path);
+                            } else if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Downloaded: $path')),
+                              );
+                            }
+                          } else if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Download failed')),
+                            );
+                          }
+                        if (mounted) setState(() => _downloading = false);
+                      },
+                child: _downloading
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Download & Install'),
               ),
           ],
         );

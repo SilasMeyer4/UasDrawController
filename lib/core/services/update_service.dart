@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class UpdateInfo {
@@ -87,5 +90,55 @@ class UpdateService {
   Future<void> openReleasePage(String url) async {
     final uri = Uri.parse(url);
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<String?> downloadAndroidApk(UpdateInfo info) async {
+    if (!Platform.isAndroid) return null;
+    // Try to pick best arch heuristically; split apks are built
+    ReleaseAsset? best;
+    for (final a in info.assets) {
+      final n = a.name.toLowerCase();
+      if (n.contains('arm64-v8a') && n.endsWith('.apk')) {
+        best = a;
+        break;
+      }
+      if (n.contains('armeabi-v7a') && n.endsWith('.apk')) {
+        best ??= a;
+      }
+      if (n.contains('x86_64') && n.endsWith('.apk')) {
+        best ??= a;
+      }
+      if (n.endsWith('.apk') && best == null) best = a;
+    }
+    if (best == null) return null;
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/${best.name}');
+    final res = await http.get(Uri.parse(best.downloadUrl));
+    if (res.statusCode != 200) return null;
+    await file.writeAsBytes(res.bodyBytes);
+    return file.path;
+  }
+
+  Future<void> installAndroidApk(String path) async {
+    if (!Platform.isAndroid) return;
+    await OpenFilex.open(path);
+  }
+
+  Future<String?> downloadLinuxTar(UpdateInfo info) async {
+    if (!Platform.isLinux) return null;
+    ReleaseAsset? best;
+    for (final a in info.assets) {
+      if (a.name.contains('linux') && a.name.endsWith('.tar.gz')) {
+        best = a;
+        break;
+      }
+    }
+    if (best == null) return null;
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/${best.name}');
+    final res = await http.get(Uri.parse(best.downloadUrl));
+    if (res.statusCode != 200) return null;
+    await file.writeAsBytes(res.bodyBytes);
+    return file.path;
   }
 }
