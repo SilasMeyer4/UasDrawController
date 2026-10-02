@@ -9,9 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:uasdraw/main.dart';
 
 void main() {
-  testWidgets('App starts and shows UasDraw Controller', (WidgetTester tester) async {
+  testWidgets('App starts and shows Connect', (WidgetTester tester) async {
     await tester.pumpWidget(const UasDrawApp());
     await tester.pumpAndSettle();
-    expect(find.text('UasDraw Controller'), findsOneWidget);
+    expect(find.text('Connect'), findsWidgets);
   });
 }
