@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  rosbridge speaks plain WebSocket without TLS, so cleartext has to be permitted
+  for the drone's address on the local network. Android blocks cleartext by
+  default from API 28 onwards, which would otherwise make every connection to
+  ws://<drone>:9090 fail silently.
+
+  The drone is addressed by IP over a LAN whose addresses cannot be enumerated
+  ahead of time, so cleartext is permitted generally here. Restrict this to the
+  specific subnet once the drone address is stable and TLS is in place.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>
