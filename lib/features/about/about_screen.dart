@@ -90,34 +90,30 @@ class _AboutScreenState extends State<AboutScreen> {
                     : () async {
                         setState(() => _downloading = true);
                         String? path;
-                        if (Theme.of(context).platform == TargetPlatform.android) {
+                        if (!mounted) return;
+                        final messenger = ScaffoldMessenger.of(context);
+                        final platform = Theme.of(context).platform;
+                        if (platform == TargetPlatform.android) {
                           path = await _updateService.downloadAndroidApk(u);
-                        } else if (Theme.of(context).platform == TargetPlatform.linux) {
+                        } else if (platform == TargetPlatform.linux) {
                           path = await _updateService.downloadLinuxTar(u);
                         }
-                          if (!mounted) {
-                            setState(() => _downloading = false);
-                            return;
-                          }
-                          if (!mounted) return;
-                          final messenger = ScaffoldMessenger.of(context);
-                          final platform = Theme.of(context).platform;
-                          if (path != null) {
-                            if (platform == TargetPlatform.android) {
-                              await _updateService.installAndroidApk(path);
-                            } else {
-                              if (!mounted) return;
-                              messenger.showSnackBar(
-                                SnackBar(content: Text('Downloaded: $path')),
-                              );
-                            }
+                        if (!mounted) return;
+                        if (path != null) {
+                          if (platform == TargetPlatform.android) {
+                            await _updateService.installAndroidApk(path);
                           } else {
-                            if (!mounted) return;
                             messenger.showSnackBar(
-                              const SnackBar(content: Text('Download failed')),
+                              SnackBar(content: Text('Downloaded: $path')),
                             );
                           }
-                        if (mounted) setState(() => _downloading = false);
+                        } else {
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Download failed')),
+                          );
+                        }
+                        if (!mounted) return;
+                        setState(() => _downloading = false);
                       },
                 child: _downloading
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
