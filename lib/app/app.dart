@@ -4,6 +4,7 @@ import '../features/connect/connect_screen.dart';
 import '../features/diagnostics/diagnostics_screen.dart';
 import '../features/drawing/drawing_screen.dart';
 import '../features/flight/flight_screen.dart';
+import '../features/about/about_screen.dart';
 
 class AppShell extends StatefulWidget {
   final Widget child;
@@ -38,6 +39,9 @@ class _AppShellState extends State<AppShell> {
             case 3:
               context.go('/flight');
               break;
+            case 4:
+              context.go('/about');
+              break;
           }
         },
         destinations: const [
@@ -45,6 +49,7 @@ class _AppShellState extends State<AppShell> {
           NavigationDestination(icon: Icon(Icons.list), label: 'Diagnostics'),
           NavigationDestination(icon: Icon(Icons.draw), label: 'Drawing'),
           NavigationDestination(icon: Icon(Icons.flight), label: 'Flight'),
+          NavigationDestination(icon: Icon(Icons.info), label: 'About'),
         ],
       ),
     );
@@ -61,6 +66,7 @@ final appRouter = GoRouter(
         GoRoute(path: '/diagnostics', builder: (context, state) => const DiagnosticsScreen()),
         GoRoute(path: '/drawing', builder: (context, state) => const DrawingScreen()),
         GoRoute(path: '/flight', builder: (context, state) => const FlightScreen()),
+        GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
       ],
     ),
   ],
