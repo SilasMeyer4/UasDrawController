@@ -1,32 +1,39 @@
-/// ROS topic/service/node graph metadata as returned by rosapi.
+/// Snapshot of the ROS graph as reported by the `rosapi` node, queried through
+/// the `/rosapi/topics`, `/rosapi/services` and `/rosapi/nodes` services.
 class RosGraph {
-  final List<String> topics;
-  final List<String> types;
-  final List<String> services;
-  final List<String> serviceTypes;
+  /// topic name -> fully qualified type
+  final Map<String, String> topics;
+
+  /// service name -> fully qualified type
+  final Map<String, String> services;
+
   final List<String> nodes;
 
-  RosGraph({
-    this.topics = const [],
-    this.types = const [],
-    this.services = const [],
-    this.serviceTypes = const [],
+  const RosGraph({
+    this.topics = const {},
+    this.services = const {},
     this.nodes = const [],
   });
 
-  RosGraph copyWith({
-    List<String>? topics,
-    List<String>? types,
-    List<String>? services,
-    List<String>? serviceTypes,
-    List<String>? nodes,
-  }) {
-    return RosGraph(
-      topics: topics ?? this.topics,
-      types: types ?? this.types,
-      services: services ?? this.services,
-      serviceTypes: serviceTypes ?? this.serviceTypes,
-      nodes: nodes ?? this.nodes,
-    );
+  bool get isEmpty => topics.isEmpty && services.isEmpty && nodes.isEmpty;
+
+  bool hasTopic(String name) => topics.containsKey(name);
+
+  bool hasService(String name) => services.containsKey(name);
+
+  String? topicType(String name) => topics[name];
+
+  String? serviceType(String name) => services[name];
+
+  /// `name` and `type` separated by a tab, sorted, ready for a text list.
+  List<String> describeTopics() => _describe(topics);
+
+  List<String> describeServices() => _describe(services);
+
+  List<String> get describeNodes => [...nodes]..sort();
+
+  static List<String> _describe(Map<String, String> source) {
+    final keys = source.keys.toList()..sort();
+    return [for (final k in keys) '$k\t${source[k] ?? ''}'.trimRight()];
   }
 }

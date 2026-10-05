@@ -74,37 +74,49 @@ The app uses a bottom navigation bar with four screens: **Connect**, **Diagnosti
 
 ### 2.3 Drawing
 
-**Purpose:** Upload and manage G-code files for drawing, and monitor the current drawing data block.
+**Purpose:** Upload G-code files for drawing, and monitor live drawing data.
 
-**Current State (v0.0.1):**
-- Basic scaffold screen is present
-- Full functionality (file picker, G-code content upload via service call, remote file list, live `UasDrawDataBlock` readout) is planned per `PLAN.md` and will be added in upcoming releases
+**Workflow:**
+1. Press **Load G-Code** and pick a `.gcode` file (Linux/Android file picker)
+2. The app calls the service bound to *Load G-Code Content*
+   (default `uas_draw_interfaces/srv/LoadGCodeContent`, request field `content: string`)
+3. The response is `uas_draw_interfaces/Result` with an `operation_result` field;
+   failures (for example empty G-code) are surfaced in the status line
+4. The screen subscribes to *Draw Data*
+   (default `uas_draw_interfaces/msg/UasDrawDataBlock` on `/UasDraw/uas_draw/data`)
+   and shows live `is_drawing` state, position, update count and timestamp
 
-**Planned Workflow (when implemented):**
-1. Select a `.gcode` file from your device (Linux/Android file picker)
-2. Upload the file content as text via the service call `/UasDraw/load_gcode_content` (type `uas_draw_interfaces/srv/LoadGCodeContent`, request field `content: string`)
-3. Monitor live messages on `/UasDraw/uas_draw/data` (`uas_draw_interfaces/msg/UasDrawDataBlock`)
-4. View drawing progress/state (`is_drawing`, position `x,y,z`, type constants)
+The **Load G-Code** button is disabled when capability discovery does not find
+the service in the live graph, so you get "service not found" instead of a
+timeout.
 
-**Note:** The ROS side must implement `/UasDraw/load_gcode_content` for the upload to work (see Section 4).
+**Note:** the ROS side must actually register `/UasDraw/load_gcode_content` for
+upload to work. No such node has been confirmed in the current workspace
+(see Section 4).
 
 ### 2.4 Flight
 
 **Purpose:** Manual teleoperation and vehicle control.
 
-**Current State (v0.0.1):**
-- Basic scaffold screen is present
-- Full implementation (virtual dual-thumb joystick, Joy publishing at 20 Hz, arm/offboard/land/RTL with hold-to-confirm, telemetry) is planned
+**Controls (implemented):**
+- **Virtual Joystick** — Two-axis pad publishing `sensor_msgs/msg/Joy` to the bound
+  Joy topic (default `/UasDraw/joy`) at **20 Hz** while a control is engaged.
+  Axes are zeroed and one all-zero sample is published when you release, or when
+  the connection drops.
+- **Vehicle Commands** — Arm, Offboard, Land, RTL buttons, each mapped to a service
+  call. Buttons are disabled when capability discovery cannot find the service.
 
-**Planned Controls (when implemented):**
-- **Virtual Joystick** — Dual-thumb control, publishes `sensor_msgs/msg/Joy` to the configured Joy topic (default `/UasDraw/joy`) while touched, axes zeroed on release
-- **Max Rate Sliders** — Adjust linear/angular rate limits
-- **Vehicle Commands** — Arm, Offboard, Land, RTL with **hold-to-confirm** (safety)
-- **Telemetry** — Battery, mode, armed status from `/mavros/battery` and `/mavros/state` (if MAVROS present)
+> **Safety:** these buttons send immediately. There is **no hold-to-confirm
+> interlock** in the current version. Do not use the app for arming until that
+> interlock exists, and always keep a physical kill switch in reach.
+
+**Telemetry:** not yet implemented.
 
 **Safety Notes:**
-- A server-side joystick timeout fail-safe is strongly recommended on the ROS side (the app zeroes axes on release, but cannot guarantee network connectivity)
-- Never rely solely on the mobile app for critical failsafes — implement them on the drone/Pi
+- A server-side joystick timeout fail-safe is strongly recommended on the ROS
+  side (the app zeroes axes on release, but cannot guarantee connectivity)
+- Never rely solely on the mobile app for critical failsafes — implement them on
+  the drone/Pi
 
 ---
 
@@ -113,11 +125,18 @@ The app uses a bottom navigation bar with four screens: **Connect**, **Diagnosti
 ### 3.1 Connection Profiles
 
 Profiles are stored persistently in the app's support directory. Defaults:
-- **Mock (Simulation)**: `ws://mock://local` (internal mock transport)
+- **Mock (Simulation)**: `mock://local` (internal mock transport)
 - **SITL / Workstation**: `ws://localhost:9090`
 - **Drone (LAN)**: `ws://192.168.1.10:9090`
 
-To change the drone IP, edit the profile in the Connect screen (future versions will add an edit UI; for now, profiles are managed via the defaults store in code if you need custom defaults).
+**Editing:** tap the overflow menu (⋮) on a profile card and choose **Edit** to
+change the name, rosbridge URL, mock flag and bindings; **Remove** deletes it
+(kept when it is the last profile). Long-pressing a card opens the editor too.
+The `+` button in the app bar adds a new profile. Profiles and their binding
+overrides survive restarts.
+
+Only `ws://` and `wss://` URLs are accepted; anything else fails fast with a
+clear error instead of opening a socket.
 
 ### 3.2 ROS Bindings
 
@@ -131,11 +150,30 @@ All logical actions map to configurable ROS names/types (see `lib/core/models/bi
 | Land | `std_srvs/srv/Trigger` | `/UasDraw/land` |
 | RTL | `std_srvs/srv/Trigger` | `/UasDraw/rtl` |
 | Load G-Code Content | `uas_draw_interfaces/srv/LoadGCodeContent` | `/UasDraw/load_gcode_content` |
+| Draw Data | `uas_draw_interfaces/msg/UasDrawDataBlock` | `/UasDraw/uas_draw/data` |
 | Setpoint (Local) | `geometry_msgs/msg/PoseStamped` | `/mavros/setpoint_position/local` |
 | Battery | `mavros_msgs/msg/BatteryState` | `/mavros/battery` |
 | State | `mavros_msgs/msg/State` | `/mavros/state` |
 
-**Capability Discovery:** On connect, the app queries `/rosbridge/topics` and `/rosbridge/services` via `rosapi`. If a binding's service/topic is not present, the corresponding UI controls are disabled (grayed out with "service not found") instead of crashing.
+**Presets:** switch a profile between **UasDraw** and **MAVROS (direct)** in the
+profile editor. The direct preset uses the real MAVROS 2.x interfaces:
+
+| Action | Service | Type | Notes |
+|---|---|---|---|
+| Arm | `/mavros/cmd/arming` | `mavros_msgs/srv/CommandBool` | `command: bool` |
+| Land | `/mavros/cmd/land` | `mavros_msgs/srv/CommandTOL` | altitude in `command` |
+| Offboard | `/mavros/cmd/command` | `mavros_msgs/srv/CommandLong` | `MAV_CMD_DO_SET_MODE` (176) |
+| RTL | `/mavros/cmd/command` | `mavros_msgs/srv/CommandLong` | `MAV_CMD_DO_SET_MODE` (176) |
+
+There is **no** `/mavros/set_mode` and **no** `/mavros/cmd/rtl`; mode changes go
+through `MAV_CMD_DO_SET_MODE`. The preset fills in PX4 custom mode numbers, which
+are firmware-specific — verify them for your PX4 build before real use. The
+`/UasDraw/*` wrapper is the safer choice.
+
+**Capability Discovery:** on connect the app queries `/rosapi/topics`,
+`/rosapi/services` and `/rosapi/nodes`. If a binding's name is absent from the
+graph, the matching UI controls are disabled rather than failing at call time.
+Diagnostics lists every binding with its availability.
 
 ---
 
@@ -145,13 +183,25 @@ For full functionality, the UasDraw ROS system must provide:
 
 | Requirement | Notes |
 |---|---|
-| `rosbridge_suite` installed | `sudo apt install ros-jazzy-rosbridge-suite` on the Pi/container. `rosapi` must run alongside `rosbridge_websocket`. |
-| `/rosbridge/*` services available | `/rosbridge/topics`, `/rosbridge/services`, `/rosbridge/nodes`, `/rosbridge/msg_definition` (provided by `rosapi`). |
-| `/UasDraw/load_gcode_content` service | Type `uas_draw_interfaces/srv/LoadGCodeContent` with `string content` request and `bool success` response. This is the upload mechanism used by the Drawing screen. |
+| `rosbridge_suite` installed | `sudo apt install ros-jazzy-rosbridge-suite`. Launch with `ros2 launch rosbridge_server rosbridge_websocket_launch.xml`, which also starts `rosapi`. |
+| `/rosapi/*` services available | `/rosapi/topics`, `/rosapi/services`, `/rosapi/nodes`, `/rosapi/message_details`. These are the real names; there is no `/rosbridge/topics`. |
+| `/UasDraw/uas_draw/data` topic | `uas_draw_interfaces/msg/UasDrawDataBlock`. Currently declares a nested `position` (`geometry_msgs/Point`), so the app reads `position.x/y/z`. |
+| `/UasDraw/load_gcode_content` service | `uas_draw_interfaces/srv/LoadGCodeContent`, request `string content`, response `Result operation_result`. |
 | (Optional) Teleop node | Subscribe to `sensor_msgs/msg/Joy`, publish position setpoints to MAVROS, expose `arm/offboard/land/rtl` as `std_srvs/srv/Trigger`. Implement a joystick timeout fail-safe server-side. |
-| (Optional) MAVROS | For real drone control: `/mavros/battery`, `/mavros/state`, `/mavros/setpoint_position/local` must be available. |
+| (Optional) MAVROS | `sudo apt install ros-jazzy-mavros ros-jazzy-mavros-msgs`, launch `mavros_node`. Provides `/mavros/battery`, `/mavros/state`, `/mavros/cmd/*`. |
+| (Optional) MAVLink link | rosbridge does not talk MAVLink. You still need a MAVLink path between ROS and PX4. |
 
-See `PLAN.md` (in this repository) for the detailed ROS-side checklist and known gaps in the current workspace.
+### Known workspace inconsistencies
+
+These are unresolved in the ROS workspace and need fixing there:
+
+- `UasDrawDataBlock.msg` defines `geometry_msgs/Point position`, but
+  `gcode_interpreter_node.cpp` still assigns `message.x/y/z`.
+- `load_file.hpp` is included but there is no `LoadFile.srv`.
+- No node registering `/UasDraw/load_gcode_content` was found.
+
+Until these are fixed, Drawing upload cannot work end to end. See `PLAN.md` for
+the full checklist.
 
 ---
 
@@ -160,8 +210,11 @@ See `PLAN.md` (in this repository) for the detailed ROS-side checklist and known
 | Issue | Solution |
 |---|---|
 | Cannot connect to `ws://192.168.1.10:9090` on Android | Ensure phone and Pi are on the same Wi-Fi network. Cleartext is allowed, but some networks/firewalls block port 9090. Check `ufw`/iptables on the Pi. |
-| App connects but services are missing | Verify `rosbridge_websocket` and `rosapi` are both running. Check `ros2 service list` on the Pi. The UasDraw nodes may not be started yet. |
+| App connects but services are missing | Verify `rosbridge_websocket` and `rosapi` are both running. `ros2 service list \| grep rosapi`. The UasDraw nodes may not be started yet. |
 | Mock mode works but real connection fails | Test with `websocat ws://<pi>:9090` from another device to rule out network/firewall issues. |
+| "ws://" URL error | Only `ws://` and `wss://` are supported. `http://` is rejected before connecting. |
+| Connect hangs | rosbridge accepts the WebSocket but the ROS graph never answers; confirm `rosapi` is running. The connection has a timeout, so it should fail rather than hang. |
+| Load G-Code is greyed out | Capability discovery did not find the bound service. Check `ros2 service list` for `/UasDraw/load_gcode_content`. |
 | Joystick feels laggy | Reduce Wi-Fi congestion, prefer 5 GHz if available. The app publishes Joy at 20 Hz while touched; network latency is expected. |
 | Android APK won't install (sideload) | Enable "Install unknown apps" for your file manager/app installer. |
 
@@ -171,7 +224,12 @@ See `PLAN.md` (in this repository) for the detailed ROS-side checklist and known
 
 - **Versioning:** `pubspec.yaml` (semantic versioning). Tags `vX.Y.Z` trigger automated releases via GitHub Actions.
 - **CI/CD:** On push/PR → `flutter analyze` + `flutter test`. On tag → build Linux (`.tar.gz`) + Android (split APKs + AAB) and attach to GitHub Release.
-- **Architecture:** Transport abstraction (`RosTransport`) with `WebSocketTransport` and `MockTransport`, rosbridge v2 protocol codec, minimal ROSDRV introspection parser, capability discovery via `rosapi`.
+- **Architecture:** Transport abstraction (`RosTransport`) with `WebSocketTransport`
+  and `MockTransport`, rosbridge v2 protocol handling, minimal ROSDRV introspection
+  parser, capability discovery via `/rosapi`.
+- **Tests:** `flutter test` covers the client, transports, bindings/profiles and
+  screens. Widget-test teardown uses `addTearDown`, because `testWidgets` runs the
+  body in a `fake_async` zone where awaiting `disconnect()` would never complete.
 - **Generated by AI:** This application was created with AI assistance as part of an exploratory/bachelor thesis workflow. It is in active development and not production-ready.
 
 ---

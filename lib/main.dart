@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/services/connection_manager.dart';
+import 'core/services/log_store.dart';
 import 'core/services/profile_store.dart';
-import 'core/models/bindings.dart';
 import 'app/app.dart';
 
 void main() async {
@@ -18,8 +18,10 @@ class UasDrawApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ConnectionManager()),
+        // One store for the whole app: the /rosout tail keeps filling while
+        // the user is on another tab.
+        ChangeNotifierProvider(create: (_) => LogStore()),
         Provider(create: (_) => ProfileStore()),
-        Provider(create: (_) => Bindings.defaults()),
       ],
       child: MaterialApp.router(
         title: 'UasDraw Controller',
@@ -27,7 +29,7 @@ class UasDrawApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
           useMaterial3: true,
         ),
-        routerConfig: appRouter,
+        routerConfig: createAppRouter(),
       ),
     );
   }

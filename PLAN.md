@@ -95,7 +95,7 @@ Settings. **No Dart code changes.**
 
 ### 2.4 Capability discovery and graceful degradation
 
-On connect, the app calls `/rosbridge/topics` and `/rosbridge/services`, diffs the
+On connect, the app calls `/rosapi/topics` and `/rosapi/services`, diffs the
 result against the bindings, and enables only what actually exists. A missing service
 produces a disabled control with a "service not found" label — never a crash. This is
 what allows the app to run today against a half-finished ROS system.
@@ -156,19 +156,19 @@ Server to client:
 ```jsonc
 {"op": "publish", "topic": "/mavros/battery", "msg": {...}}
 {"op": "service_response", "id": "3", "service": "/UasDraw/arm", "values": {"success": true}, "result": true}
-{"op": "call_service", "id": "4", "service": "/rosbridge/topics", "type": "rosapi_msgs/srv/Topics", "args": {}}
+{"op": "call_service", "id": "4", "service": "/rosapi/topics", "type": "rosapi_msgs/srv/Topics", "args": {}}
 ```
 
 Introspection, which is what makes the dynamic service-call form possible:
 
 ```jsonc
-{"op": "call_service", "service": "/rosbridge/msg_definition",
- "type": "rosapi_msgs/srv/MessageDefinition",
- "args": {"message_definition": "std_srvs/srv/Trigger"}}
+{"op": "call_service", "service": "/rosapi/message_details",
+ "type": "rosapi_msgs/srv/MessageDetails",
+ "args": {"type": "std_srvs/srv/Trigger"}}
 ```
 
-returns a ROSDRV text schema (`"bool success\n---\n"`). The app parses that into a typed
-field tree, including array bounds and named constants such as the
+returns `typedefs_full_text`, a ROSDRV schema (`"bool success\n---\n"`). The app parses
+that into a typed field tree, including array bounds and named constants such as the
 `TYPE_RAPID=0` style constants in `UasDrawDataBlock`, and builds a form from it.
 
 Default port: `9090`, bound to `0.0.0.0`.
@@ -226,7 +226,7 @@ coupling to the drone's rosbridge release.
 | P2 | Transport interface, both implementations, op codec, introspection parser, rosgraph cache, stores | `flutter test` green |
 | P3 | Diagnostics: profiles, graph lists, live topic viewer, dynamic service form, parameters | manual |
 | P4 | Drawing: file picker, content upload, file list, live `UasDrawDataBlock` readout | manual |
-| P5 | Flight: virtual joystick, vehicle commands with confirmation, telemetry | manual |
+| P5 | Flight: virtual joystick, vehicle commands **with hold-to-confirm**, telemetry | manual |
 | P6 | Reconnect UX, landscape layout, `README.md` with the ROS-side checklist | manual |
 
 ---
@@ -239,16 +239,20 @@ coupling to the drone's rosbridge release.
      bash -lc "ls /opt/ros/jazzy/share | grep -i rosbridge"
    ```
    `osrf/ros:jazzy-desktop-full` does not ship `rosbridge_suite`, so expect no output.
-   Install with `sudo apt install ros-jazzy-rosbridge-suite`, then confirm these
-   services appear: `/rosbridge/topics`, `/rosbridge/services`, `/rosbridge/nodes`,
-   `/rosbridge/msg_definition`. `rosapi` must run alongside `rosbridge_websocket` —
-   without it the app has no introspection and no dynamic forms.
+   Install with `sudo apt install ros-jazzy-rosbridge-suite`, launch with
+   `ros2 launch rosbridge_server rosbridge_websocket_launch.xml`, then confirm these
+   services appear: `/rosapi/topics`, `/rosapi/services`, `/rosapi/nodes`,
+   `/rosapi/message_details`. Note the **`/rosapi/*`** prefix — earlier drafts of this
+   plan wrongly named them `/rosbridge/*`, which does not exist. `rosapi` must run
+   alongside `rosbridge_websocket`; without it the app has no introspection.
 2. **Fix `LoadFile`** in the workspace: call `CreateLoadFileService()` from the
    `GCodeInterpreterNode` constructor, and hoist the parsed block vector out of the
    timer lambda into a member guarded by a mutex. As written the service is never
    registered and the lambda captures `data` by value.
-3. **Add `LoadGCodeContent.srv`** (`string content` / `---` / `bool success`) plus a
-   handler that writes the content to disk and reloads, so the Drawing tab works.
+3. **`LoadGCodeContent` already exists, but has no node.** The `.srv` is present with
+   `string content` and a `Result operation_result` response, yet no node registers
+   `/UasDraw/load_gcode_content`. Register a handler that writes the content to disk and
+   reloads. Also add the missing `LoadFile.srv` that `load_file.hpp` includes.
 4. **Add a teleop node**: subscribe `sensor_msgs/msg/Joy`, publish
    `geometry_msgs/msg/PoseStamped` to `/mavros/setpoint_position/local` at 20 Hz, and
    expose `/UasDraw/{arm,offboard,land,rtl}` as `std_srvs/srv/Trigger`. Position hold
@@ -262,6 +266,17 @@ coupling to the drone's rosbridge release.
    forever. Add a `loop` parameter defaulting to `false`.
 7. **Network**: rosbridge binds `0.0.0.0`, so anyone on that network can arm the
    drone. Keep it on a dedicated network or add authentication.
+8. **Fix the `position` field mismatch**: `UasDrawDataBlock.msg` declares
+   `geometry_msgs/Point position`, but `gcode_interpreter_node.cpp` still assigns
+   `message.x/y/z`. That code cannot compile against the current interface; the app
+   parses the nested `position`.
+9. **Install MAVROS if you want the direct preset**:
+   `sudo apt install ros-jazzy-mavros ros-jazzy-mavros-msgs`, then
+   `ros2 launch mavros mavros_node.launch`. rosbridge does not carry MAVLink — a
+   MAVLink path to PX4 is still required.
+10. **Validate the direct-MAVROS mode numbers.** The preset encodes PX4 custom modes
+    via `MAV_CMD_DO_SET_MODE` (176). These are firmware-specific. Verify against your
+    PX4 build, or use the `/UasDraw/*` wrapper.
 
 ---
 
