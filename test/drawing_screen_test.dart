@@ -335,27 +335,30 @@ void main() {
   });
 
   group('live canvas', () {
-    testWidgets('the width slider resizes the canvas', (tester) async {
-      await withApp(tester, (_) async {
+    testWidgets('the dimensions dialog updates the wall mapping',
+        (tester) async {
+      await withApp(tester, (h) async {
         await openDrawing(tester);
-        final slider = find.byKey(const Key('live-canvas-width'));
-        await scrollTo(tester, slider);
-
-        final canvas = find.byKey(const Key('live-canvas'));
-        final before = tester.getSize(canvas).width;
-        expect(before, greaterThan(200));
-
-        await tester.drag(slider, const Offset(-160, 0));
+        await scrollTo(tester, find.byKey(const Key('edit-wall-size')));
+        await tester.tap(find.byKey(const Key('edit-wall-size')));
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-        // Shrinking the canvas also shrinks the card, so jump back to the top
-        // before measuring the rebuilt canvas.
-        tester
-            .state<ScrollableState>(find.byType(Scrollable))
-            .position
-            .jumpTo(0);
+        await tester.enterText(
+          find.byKey(const Key('wall-width-input')),
+          '6',
+        );
+        await tester.enterText(
+          find.byKey(const Key('wall-height-input')),
+          '4',
+        );
+        await tester.tap(find.byKey(const Key('wall-size-apply')));
         await tester.pump();
-        expect(tester.getSize(canvas).width, lessThan(before));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(h.trace.wallBounds.width, 6);
+        expect(h.trace.wallBounds.height, 4);
+        expect(find.textContaining('Wall 6.00 × 4.00 m'), findsOneWidget);
       });
     });
 

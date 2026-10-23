@@ -59,7 +59,9 @@ source install/setup.bash
 The Drawing tab paints its live canvas from the Gazebo contact sensor on
 `/pen/contact` (`gz.msgs.Contacts`) bridged to
 `ros_gz_interfaces/msg/Contacts`. `uas_sim.launch.py` starts this bridge
-alongside the clock bridge; if you launch Gazebo separately, start it yourself.
+alongside the clock bridge; if you launch Gazebo separately, start it yourself. The
+canvas uses editable wall dimensions so it can match resized draw areas in
+simulation.
 
 Gazebo publishes contact sensors on their scoped topic, not on the `<topic>`
 element in the model SDF. Check the actual name with:

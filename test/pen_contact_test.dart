@@ -33,6 +33,24 @@ void main() {
       expect(bounds.normalize(y: 10, z: 10), const Offset(0, 0));
       expect(bounds.normalize(y: -10, z: -10), const Offset(1, 1));
     });
+
+    test('builds bounds from width, height, center Y, and bottom Z', () {
+      final bounds = WallBounds.fromExtent(
+        width: 6,
+        height: 4,
+        centerY: 1,
+        bottomZ: 0.5,
+      );
+
+      expect(bounds.minY, -2);
+      expect(bounds.maxY, 4);
+      expect(bounds.minZ, 0.5);
+      expect(bounds.maxZ, 4.5);
+      expect(bounds.width, 6);
+      expect(bounds.height, 4);
+      expect(bounds.centerY, 1);
+      expect(bounds.isValid, isTrue);
+    });
   });
 
   group('parsePenContact', () {
@@ -158,6 +176,35 @@ void main() {
       );
 
       expect(store.pointCount, 1);
+    });
+
+    test('changing wall bounds remaps existing points and future contacts', () {
+      store.ingest(contactMessage(), now: DateTime(2026, 1, 1));
+      expect(
+        store.strokes.single.points.single,
+        const Offset(0.375, 0.5),
+      );
+
+      store.updateWallBounds(
+        WallBounds.fromExtent(width: 6, height: 4),
+      );
+
+      expect(store.wallBounds.width, 6);
+      expect(store.wallBounds.height, 4);
+      final remapped = store.strokes.single.points.single;
+      expect(remapped.dx, closeTo(0.4167, 0.0001));
+      expect(remapped.dy, closeTo(0.625, 0.0001));
+
+      store.ingest(
+        contactMessage(
+          positions: const <Map<String, dynamic>>[
+            <String, dynamic>{'x': 2.95, 'y': 3, 'z': 4},
+          ],
+        ),
+        now: DateTime(2026, 1, 1, 0, 0, 0, 100),
+      );
+      final fresh = store.strokes.single.points.last;
+      expect(fresh, const Offset(0, 0));
     });
 
     test('clear removes every stroke and resets the indicator', () {

@@ -89,11 +89,14 @@ The app uses a bottom navigation bar with four screens: **Connect**, **Diagnosti
 **Live canvas:** the Drawing tab also paints the wall from Gazebo's pen contact
 stream. It subscribes to the *Pen Contact* binding (default `/pen/contact`,
 `ros_gz_interfaces/msg/Contacts`), which `ros_gz_bridge` relays from the
-Gazebo contact sensor. Use the **Canvas width** slider to resize the preview
-(200-1200 px); the height follows the wall's 4:3 aspect ratio. The **Clear**
-button removes the local trace only; it does not clear Gazebo or ROS. The trace
-is held in an app-level store, so it keeps recording while you visit another
-tab and is still there when you return.
+Gazebo contact sensor. The card shows the current wall extents and a
+**Dimensions** button. Set **Width (Y)**, **Height (Z)**, **Center Y** and
+**Bottom Z** in metres to match the drawing wall in Gazebo; the preview aspect
+ratio follows the wall size and existing strokes are remapped to the new
+extents. The defaults are 4 m wide, 3 m high, centered on Y = 0 with the bottom
+at Z = 0. The **Clear** button removes the local trace only; it does not clear
+Gazebo or ROS. The trace is held in an app-level store, so it keeps recording
+while you visit another tab and is still there when you return.
 
 The **Load G-Code** button is disabled when capability discovery does not find
 the service in the live graph, so you get "service not found" instead of a

@@ -25,13 +25,15 @@ class PenStroke {
 /// follows [ConnectionManager] exactly like `LogStore` follows `/rosout`.
 class PenTraceStore extends ChangeNotifier {
   PenTraceStore({
-    this.wallBounds = const WallBounds(),
+    WallBounds initialWallBounds = const WallBounds(),
     this.strokeGap = const Duration(milliseconds: 500),
     this.minPointSpacing = 0.002,
-  });
+  }) : _wallBounds = initialWallBounds;
+
+  WallBounds _wallBounds;
 
   /// World-space extents of the drawing wall.
-  final WallBounds wallBounds;
+  WallBounds get wallBounds => _wallBounds;
 
   /// A pause longer than this starts a new stroke even if Gazebo never sent an
   /// explicit "no contact" message.
@@ -183,6 +185,25 @@ class PenTraceStore extends ChangeNotifier {
       }
       _endContact();
     });
+  }
+
+  /// Changes the wall extents used by the canvas.
+  ///
+  /// Existing strokes are remapped from their old world position so a resize
+  /// does not move already-drawn contacts relative to the wall.
+  void updateWallBounds(WallBounds bounds) {
+    if (_disposed || !bounds.isValid || bounds == _wallBounds) return;
+    final previous = _wallBounds;
+    for (final stroke in _strokes) {
+      for (var i = 0; i < stroke.points.length; i++) {
+        final point = stroke.points[i];
+        final y = previous.maxY - point.dx * previous.width;
+        final z = previous.maxZ - point.dy * previous.height;
+        stroke.points[i] = bounds.normalize(y: y, z: z);
+      }
+    }
+    _wallBounds = bounds;
+    notifyListeners();
   }
 
   /// Removes every stroke and resets the contact indicator.

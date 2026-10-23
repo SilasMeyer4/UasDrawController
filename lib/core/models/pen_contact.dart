@@ -14,6 +14,22 @@ class WallBounds {
     this.maxZ = 3.0,
   });
 
+  /// Builds bounds from a wall's width/height and its lower-left anchor.
+  factory WallBounds.fromExtent({
+    required double width,
+    required double height,
+    double centerY = 0,
+    double bottomZ = 0,
+  }) {
+    final halfWidth = width / 2;
+    return WallBounds(
+      minY: centerY - halfWidth,
+      maxY: centerY + halfWidth,
+      minZ: bottomZ,
+      maxZ: bottomZ + height,
+    );
+  }
+
   final double minY;
   final double maxY;
   final double minZ;
@@ -21,6 +37,23 @@ class WallBounds {
 
   double get width => maxY - minY;
   double get height => maxZ - minZ;
+
+  double get centerY => (minY + maxY) / 2;
+
+  bool get isValid => width > 0 && height > 0;
+
+  WallBounds copyWith({
+    double? minY,
+    double? maxY,
+    double? minZ,
+    double? maxZ,
+  }) =>
+      WallBounds(
+        minY: minY ?? this.minY,
+        maxY: maxY ?? this.maxY,
+        minZ: minZ ?? this.minZ,
+        maxZ: maxZ ?? this.maxZ,
+      );
 
   /// Maps a world-space contact point onto the wall as a normalized offset.
   ///
@@ -32,6 +65,21 @@ class WallBounds {
     final v = ((maxZ - z) / height).clamp(0.0, 1.0);
     return Offset(u, v);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WallBounds &&
+          other.minY == minY &&
+          other.maxY == maxY &&
+          other.minZ == minZ &&
+          other.maxZ == maxZ;
+
+  @override
+  int get hashCode => Object.hash(minY, maxY, minZ, maxZ);
+
+  @override
+  String toString() => 'WallBounds(Y: $minY..$maxY, Z: $minZ..$maxZ)';
 }
 
 /// One averaged pen-tip position from a contact message.
