@@ -10,6 +10,7 @@ import 'package:uasdraw/core/models/bindings.dart';
 const Map<LogicalAction, String> expectedTypes = <LogicalAction, String>{
   LogicalAction.drawData: 'uas_draw_interfaces/msg/UasDrawDataBlock',
   LogicalAction.bufferStatus: 'uas_draw_interfaces/msg/BufferStatus',
+  LogicalAction.penContact: 'ros_gz_interfaces/msg/Contacts',
   LogicalAction.rosout: 'rcl_interfaces/msg/Log',
   LogicalAction.loadGcodeContent: 'uas_draw_interfaces/srv/LoadGCodeContent',
   LogicalAction.pause: 'uas_draw_interfaces/srv/Pause',
@@ -27,8 +28,12 @@ void main() {
     final bindings = Bindings.uasDraw();
 
     test('binds every interface under /uas_draw', () {
-      // /rosout is a standard ROS topic, not one this node owns.
-      const external = <LogicalAction>{LogicalAction.rosout};
+      // /rosout and the Gazebo contact stream are standard/external topics,
+      // not ones the UasDraw node owns.
+      const external = <LogicalAction>{
+        LogicalAction.rosout,
+        LogicalAction.penContact,
+      };
       for (final entry in expectedTypes.entries) {
         final binding = bindings.get(entry.key);
         expect(binding, isNotNull, reason: '${entry.key} is not bound');
@@ -69,6 +74,7 @@ void main() {
     test('the two kinds of ROS name are classified correctly', () {
       expect(bindings.get(LogicalAction.drawData)!.kind, BindingKind.topic);
       expect(bindings.get(LogicalAction.bufferStatus)!.kind, BindingKind.topic);
+      expect(bindings.get(LogicalAction.penContact)!.kind, BindingKind.topic);
       expect(bindings.get(LogicalAction.rosout)!.kind, BindingKind.topic);
       expect(bindings.get(LogicalAction.pause)!.kind, BindingKind.service);
       expect(

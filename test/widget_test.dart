@@ -6,6 +6,7 @@ import 'package:uasdraw/core/models/bindings.dart';
 import 'package:uasdraw/core/models/connection_profile.dart';
 import 'package:uasdraw/core/services/connection_manager.dart';
 import 'package:uasdraw/core/services/log_store.dart';
+import 'package:uasdraw/core/services/pen_trace_store.dart';
 import 'package:uasdraw/core/services/profile_store.dart';
 import 'package:uasdraw/main.dart';
 
@@ -40,18 +41,21 @@ Future<void> withApp(
 }) async {
   final harness = AppHarness();
   addTearDown(harness.dispose);
-  await harness.cm.connect(profile ??
-      ConnectionProfile(
-        name: 'Mock',
-        wsUrl: 'mock://local',
-        isMock: true,
-        bindings: bindings,
-      ));
+  await harness.cm.connect(
+    profile ??
+        ConnectionProfile(
+          name: 'Mock',
+          wsUrl: 'mock://local',
+          isMock: true,
+          bindings: bindings,
+        ),
+  );
   await tester.pumpWidget(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<ConnectionManager>.value(value: harness.cm),
         ChangeNotifierProvider<LogStore>.value(value: harness.logs),
+        ChangeNotifierProvider<PenTraceStore>.value(value: harness.trace),
         Provider<ProfileStore>(create: (_) => _FakeProfileStore()),
       ],
       child: MaterialApp.router(routerConfig: createAppRouter()),
@@ -85,6 +89,7 @@ Future<void> withApp(
 class AppHarness {
   final ConnectionManager cm = ConnectionManager();
   final LogStore logs = LogStore();
+  final PenTraceStore trace = PenTraceStore();
 
   Future<void>? _disposal;
 
@@ -93,6 +98,7 @@ class AppHarness {
   Future<void> _dispose() async {
     await cm.disconnect();
     logs.dispose();
+    trace.dispose();
   }
 }
 
@@ -103,8 +109,9 @@ void main() {
     expect(find.text('Connect'), findsWidgets);
   });
 
-  testWidgets('connecting to the mock profile populates the ROS graph',
-      (tester) async {
+  testWidgets('connecting to the mock profile populates the ROS graph', (
+    tester,
+  ) async {
     await withApp(tester, (h) async {
       final cm = h.cm;
       expect(find.text('Mock (Simulation)'), findsOneWidget);
@@ -115,8 +122,9 @@ void main() {
     });
   });
 
-  testWidgets('connect failure is surfaced and leaves the app disconnected',
-      (tester) async {
+  testWidgets('connect failure is surfaced and leaves the app disconnected', (
+    tester,
+  ) async {
     final cm = ConnectionManager();
     addTearDown(cm.disconnect);
     // A wrong URL scheme fails before any socket is opened.
@@ -138,8 +146,9 @@ void main() {
     expect(find.textContaining('Connection failed'), findsOneWidget);
   });
 
-  testWidgets('flight screen advertises Joy and stops the stream on request',
-      (tester) async {
+  testWidgets('flight screen advertises Joy and stops the stream on request', (
+    tester,
+  ) async {
     await withApp(tester, (h) async {
       expect(h.cm.isConnected, isTrue);
       await tester.tap(find.text('Flight'));
@@ -155,27 +164,39 @@ void main() {
     });
   });
 
-  testWidgets('drawing screen subscribes to the drawing topic',
-      (tester) async {
+  testWidgets('drawing screen subscribes to the drawing topic', (tester) async {
     await withApp(tester, (h) async {
       final cm = h.cm;
       await tester.tap(find.text('Drawing'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(find.text('/uas_draw/data'), findsOneWidget);
       expect(cm.client!.subscribed.keys, contains('/uas_draw/data'));
     });
   });
 
-  testWidgets('drawing screen gates upload on capability discovery',
-      (tester) async {
+  testWidgets('drawing screen gates upload on capability discovery', (
+    tester,
+  ) async {
     await withApp(
       tester,
       (h) async {
         await tester.tap(find.text('Drawing'));
         await tester.pump();
 
-        expect(find.textContaining('not found in the ROS graph'), findsOneWidget);
+        // The live canvas sits above the upload controls, so scroll the lazy
+        // list until the button is built.
+        await tester.scrollUntilVisible(
+          find.text('Load demo g-code'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pump();
+
+        expect(
+          find.textContaining('not found in the ROS graph'),
+          findsOneWidget,
+        );
         final button = tester.widget<OutlinedButton>(
           find.ancestor(
             of: find.text('Load demo g-code'),
@@ -188,13 +209,16 @@ void main() {
       bindings: Bindings.uasDraw().withOverride(
         LogicalAction.loadGcodeContent,
         const Binding.service(
-            '/nope/load', 'uas_draw_interfaces/srv/LoadGCodeContent'),
+          '/nope/load',
+          'uas_draw_interfaces/srv/LoadGCodeContent',
+        ),
       ),
     );
   });
 
-  testWidgets('diagnostics lists bindings with their availability',
-      (tester) async {
+  testWidgets('diagnostics lists bindings with their availability', (
+    tester,
+  ) async {
     await withApp(tester, (h) async {
       await tester.tap(find.text('Diagnostics'));
       await tester.pump();
@@ -228,10 +252,11 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('subscribes to /rosout when the tab is first opened',
-        (tester) async {
+    testWidgets('subscribes to /rosout when the tab is first opened', (
+      tester,
+    ) async {
       await withApp(tester, (h) async {
-      final cm = h.cm;
+        final cm = h.cm;
         await openLogs(tester);
         expect(find.text('Logs'), findsWidgets);
         expect(cm.client!.subscribed.keys, contains('/rosout'));
@@ -253,8 +278,9 @@ void main() {
       });
     });
 
-    testWidgets('clear empties the list and re-enables the empty state',
-        (tester) async {
+    testWidgets('clear empties the list and re-enables the empty state', (
+      tester,
+    ) async {
       await withApp(tester, (h) async {
         await openLogs(tester);
         await tester.pump(const Duration(milliseconds: 700));
@@ -269,8 +295,9 @@ void main() {
       });
     });
 
-    testWidgets('the severity filter narrows the list without disconnecting',
-        (tester) async {
+    testWidgets('the severity filter narrows the list without disconnecting', (
+      tester,
+    ) async {
       await withApp(tester, (h) async {
         await openLogs(tester);
         await tester.pump(const Duration(milliseconds: 700));

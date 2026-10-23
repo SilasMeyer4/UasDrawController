@@ -19,9 +19,15 @@ void main() {
     test('mavros preset uses real MAVROS 2.x service names and types', () {
       final bindings = Bindings.mavros();
       expect(bindings.get(LogicalAction.arm)?.name, '/mavros/cmd/arming');
-      expect(bindings.get(LogicalAction.arm)?.type, 'mavros_msgs/srv/CommandBool');
+      expect(
+        bindings.get(LogicalAction.arm)?.type,
+        'mavros_msgs/srv/CommandBool',
+      );
       expect(bindings.get(LogicalAction.land)?.name, '/mavros/cmd/land');
-      expect(bindings.get(LogicalAction.land)?.type, 'mavros_msgs/srv/CommandTOL');
+      expect(
+        bindings.get(LogicalAction.land)?.type,
+        'mavros_msgs/srv/CommandTOL',
+      );
       // MAVROS 2.x has no /mavros/set_mode and no /mavros/cmd/rtl service.
       expect(bindings.get(LogicalAction.offboard)?.name, '/mavros/cmd/command');
       expect(bindings.get(LogicalAction.rtl)?.name, '/mavros/cmd/command');
@@ -42,7 +48,13 @@ void main() {
 
     test('CommandTOL land sends all required fields', () {
       final land = Bindings.mavros().get(LogicalAction.land)!;
-      for (final field in ['min_pitch', 'yaw', 'latitude', 'longitude', 'altitude']) {
+      for (final field in [
+        'min_pitch',
+        'yaw',
+        'latitude',
+        'longitude',
+        'altitude',
+      ]) {
         expect(land.args.containsKey(field), isTrue, reason: 'missing $field');
       }
     });
@@ -58,9 +70,10 @@ void main() {
     test('presetName identifies stock presets and custom edits', () {
       expect(Bindings.presetName(Bindings.uasDraw()), 'uasDraw');
       expect(Bindings.presetName(Bindings.mavros()), 'mavros');
-      final edited =
-          Bindings.uasDraw().withOverride(LogicalAction.arm,
-              const Binding.service('/other/arm', 'std_srvs/srv/Trigger'));
+      final edited = Bindings.uasDraw().withOverride(
+        LogicalAction.arm,
+        const Binding.service('/other/arm', 'std_srvs/srv/Trigger'),
+      );
       expect(Bindings.presetName(edited), 'custom');
     });
   });
@@ -81,8 +94,10 @@ void main() {
         'std_srvs/srv/Trigger',
         args: <String, dynamic>{'a': 1, 'b': 2},
       );
-      expect(binding.argsWith(<String, dynamic>{'b': 3}),
-          <String, dynamic>{'a': 1, 'b': 3});
+      expect(binding.argsWith(<String, dynamic>{'b': 3}), <String, dynamic>{
+        'a': 1,
+        'b': 3,
+      });
     });
   });
 
@@ -95,7 +110,7 @@ void main() {
       expect(restored.toJson(), original.toJson());
     });
 
-    test('unknown action keys are ignored', () {
+    test('unknown action keys are ignored and missing defaults are filled', () {
       final restored = Bindings.fromJson(<String, dynamic>{
         'joy': <String, dynamic>{
           'name': '/j',
@@ -104,7 +119,9 @@ void main() {
         },
         'notAnAction': <String, dynamic>{'name': '/x'},
       });
-      expect(restored.all.keys, <LogicalAction>[LogicalAction.joy]);
+      expect(restored.get(LogicalAction.joy)?.name, '/j');
+      // New defaults are merged into profiles saved before they existed.
+      expect(restored.get(LogicalAction.penContact)?.name, '/pen/contact');
     });
 
     test('profile round-trips with its bindings', () {
@@ -119,7 +136,10 @@ void main() {
       expect(restored.name, 'Drone');
       expect(restored.wsUrl, 'ws://10.0.0.5:9090');
       expect(restored.isMock, isFalse);
-      expect(restored.bindings.get(LogicalAction.arm)?.name, '/mavros/cmd/arming');
+      expect(
+        restored.bindings.get(LogicalAction.arm)?.name,
+        '/mavros/cmd/arming',
+      );
     });
 
     test('a profile without bindings falls back to the uasDraw preset', () {

@@ -86,6 +86,15 @@ The app uses a bottom navigation bar with four screens: **Connect**, **Diagnosti
    (default `uas_draw_interfaces/msg/UasDrawDataBlock` on `/UasDraw/uas_draw/data`)
    and shows live `is_drawing` state, position, update count and timestamp
 
+**Live canvas:** the Drawing tab also paints the wall from Gazebo's pen contact
+stream. It subscribes to the *Pen Contact* binding (default `/pen/contact`,
+`ros_gz_interfaces/msg/Contacts`), which `ros_gz_bridge` relays from the
+Gazebo contact sensor. Use the **Canvas width** slider to resize the preview
+(200-1200 px); the height follows the wall's 4:3 aspect ratio. The **Clear**
+button removes the local trace only; it does not clear Gazebo or ROS. The trace
+is held in an app-level store, so it keeps recording while you visit another
+tab and is still there when you return.
+
 The **Load G-Code** button is disabled when capability discovery does not find
 the service in the live graph, so you get "service not found" instead of a
 timeout.
@@ -151,6 +160,7 @@ All logical actions map to configurable ROS names/types (see `lib/core/models/bi
 | RTL | `std_srvs/srv/Trigger` | `/UasDraw/rtl` |
 | Load G-Code Content | `uas_draw_interfaces/srv/LoadGCodeContent` | `/UasDraw/load_gcode_content` |
 | Draw Data | `uas_draw_interfaces/msg/UasDrawDataBlock` | `/UasDraw/uas_draw/data` |
+| Pen Contact | `ros_gz_interfaces/msg/Contacts` | `/pen/contact` |
 | Setpoint (Local) | `geometry_msgs/msg/PoseStamped` | `/mavros/setpoint_position/local` |
 | Battery | `mavros_msgs/msg/BatteryState` | `/mavros/battery` |
 | State | `mavros_msgs/msg/State` | `/mavros/state` |
@@ -186,6 +196,7 @@ For full functionality, the UasDraw ROS system must provide:
 | `rosbridge_suite` installed | `sudo apt install ros-jazzy-rosbridge-suite`. Launch with `ros2 launch rosbridge_server rosbridge_websocket_launch.xml`, which also starts `rosapi`. |
 | `/rosapi/*` services available | `/rosapi/topics`, `/rosapi/services`, `/rosapi/nodes`, `/rosapi/message_details`. These are the real names; there is no `/rosbridge/topics`. |
 | `/UasDraw/uas_draw/data` topic | `uas_draw_interfaces/msg/UasDrawDataBlock`. Currently declares a nested `position` (`geometry_msgs/Point`), so the app reads `position.x/y/z`. |
+| `/pen/contact` topic | `ros_gz_interfaces/msg/Contacts`, bridged from the Gazebo contact sensor with `ros_gz_bridge`. Required for the live canvas. Gazebo publishes the sensor under its scoped name, so the bridge remaps that name to `/pen/contact`. The simulation launch starts this bridge; for a manual Gazebo launch, see the README. |
 | `/UasDraw/load_gcode_content` service | `uas_draw_interfaces/srv/LoadGCodeContent`, request `string content`, response `Result operation_result`. |
 | (Optional) Teleop node | Subscribe to `sensor_msgs/msg/Joy`, publish position setpoints to MAVROS, expose `arm/offboard/land/rtl` as `std_srvs/srv/Trigger`. Implement a joystick timeout fail-safe server-side. |
 | (Optional) MAVROS | `sudo apt install ros-jazzy-mavros ros-jazzy-mavros-msgs`, launch `mavros_node`. Provides `/mavros/battery`, `/mavros/state`, `/mavros/cmd/*`. |
@@ -215,6 +226,7 @@ the full checklist.
 | "ws://" URL error | Only `ws://` and `wss://` are supported. `http://` is rejected before connecting. |
 | Connect hangs | rosbridge accepts the WebSocket but the ROS graph never answers; confirm `rosapi` is running. The connection has a timeout, so it should fail rather than hang. |
 | Load G-Code is greyed out | Capability discovery did not find the bound service. Check `ros2 service list` for `/UasDraw/load_gcode_content`. |
+| Live canvas is empty or says "no topic" | Check that Gazebo is publishing the scoped sensor topic: `gz topic -l \| grep pen_contact`. Make sure the `ros_gz_bridge` contact bridge remaps that scoped topic to `/pen/contact`, then confirm with `ros2 topic echo /pen/contact --once`. Contacts only arrive while the pen touches the wall. |
 | Joystick feels laggy | Reduce Wi-Fi congestion, prefer 5 GHz if available. The app publishes Joy at 20 Hz while touched; network latency is expected. |
 | Android APK won't install (sideload) | Enable "Install unknown apps" for your file manager/app installer. |
 

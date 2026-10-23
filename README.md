@@ -12,7 +12,7 @@ A Flutter-based mobile/desktop controller for the [UasDraw](https://github.com/S
 - Connect to ROS 2 via `rosbridge_suite` (WebSocket)
 - Named connection profiles with per-profile topic/service bindings
 - Diagnostics: nodes, topics, services, and which bindings are actually present
-- Drawing: G-code upload via service call (`/UasDraw/load_gcode_content`), live pen position
+- Drawing: G-code upload via service call (`/UasDraw/load_gcode_content`), live pen position, and a resizable wall canvas that draws the `/pen/contact` stream
 - Flight: virtual joystick publishing `sensor_msgs/Joy` at 20 Hz, plus vehicle commands
 - Offline simulation (`MockTransport`) for development without ROS
 
@@ -54,14 +54,44 @@ colcon build
 source install/setup.bash
 ```
 
-### 3. MAVROS (only needed for the direct-MAVROS binding preset)
+### 3. Gazebo pen contact bridge (simulation)
+
+The Drawing tab paints its live canvas from the Gazebo contact sensor on
+`/pen/contact` (`gz.msgs.Contacts`) bridged to
+`ros_gz_interfaces/msg/Contacts`. `uas_sim.launch.py` starts this bridge
+alongside the clock bridge; if you launch Gazebo separately, start it yourself.
+
+Gazebo publishes contact sensors on their scoped topic, not on the `<topic>`
+element in the model SDF. Check the actual name with:
+
+```bash
+gz topic -l | grep pen_contact
+# /world/uas_draw/model/uas_draw_0/link/pen_tip_link/sensor/pen_contact/contact
+```
+
+Bridge that topic and remap it to `/pen/contact`:
+
+```bash
+T=/world/uas_draw/model/uas_draw_0/link/pen_tip_link/sensor/pen_contact/contact
+ros2 run ros_gz_bridge parameter_bridge \
+  "$T@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts" \
+  --ros-args -r "$T:=/pen/contact"
+```
+
+Verify the bridged topic before opening the app:
+
+```bash
+ros2 topic echo /pen/contact --once
+```
+
+### 4. MAVROS (only needed for the direct-MAVROS binding preset)
 
 ```bash
 sudo apt install ros-jazzy-mavros ros-jazzy-mavros-msgs
 ros2 launch mavros mavros_node.launch
 ```
 
-### 4. MAVLink and PX4
+### 5. MAVLink and PX4
 
 rosbridge is a ROS graph client only. For real flight you must additionally run
 a MAVLink link between ROS and the flight controller. PX4 SITL plus a local

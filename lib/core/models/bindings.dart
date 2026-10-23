@@ -13,14 +13,23 @@ class Binding {
     this.args = const <String, dynamic>{},
   });
 
-  const Binding.topic(this.name, this.type, {this.args = const <String, dynamic>{}})
-      : kind = BindingKind.topic;
+  const Binding.topic(
+    this.name,
+    this.type, {
+    this.args = const <String, dynamic>{},
+  }) : kind = BindingKind.topic;
 
-  const Binding.service(this.name, this.type, {this.args = const <String, dynamic>{}})
-      : kind = BindingKind.service;
+  const Binding.service(
+    this.name,
+    this.type, {
+    this.args = const <String, dynamic>{},
+  }) : kind = BindingKind.service;
 
-  const Binding.action(this.name, this.type, {this.args = const <String, dynamic>{}})
-      : kind = BindingKind.action;
+  const Binding.action(
+    this.name,
+    this.type, {
+    this.args = const <String, dynamic>{},
+  }) : kind = BindingKind.action;
 
   /// Absolute ROS name, e.g. `/UasDraw/arm`.
   final String name;
@@ -81,6 +90,7 @@ class Binding {
 enum LogicalAction {
   joy,
   drawData,
+  penContact,
   arm,
   offboard,
   land,
@@ -121,8 +131,7 @@ class Bindings {
 
   /// Bindings shared by every preset because they belong to the ROS graph
   /// itself rather than to one node: `/rosout` is where every node logs.
-  static Map<LogicalAction, Binding> get _shared =>
-      <LogicalAction, Binding>{
+  static Map<LogicalAction, Binding> get _shared => <LogicalAction, Binding>{
         LogicalAction.rosout: const Binding.topic(
           '/rosout',
           'rcl_interfaces/msg/Log',
@@ -175,6 +184,12 @@ class Bindings {
         LogicalAction.bufferStatus: const Binding.topic(
           '/uas_draw/buffer_status',
           'uas_draw_interfaces/msg/BufferStatus',
+        ),
+        // Gazebo contact sensor stream, bridged by ros_gz_bridge. The app uses
+        // it to draw the pen trace locally instead of spawning mark models.
+        LogicalAction.penContact: const Binding.topic(
+          '/pen/contact',
+          'ros_gz_interfaces/msg/Contacts',
         ),
       };
 
@@ -322,16 +337,27 @@ class Bindings {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        for (final entry in _map.entries)
-          entry.key.name: entry.value.toJson(),
+        for (final entry in _map.entries) entry.key.name: entry.value.toJson(),
       };
 
-  static Bindings fromJson(Map<String, dynamic> json) => Bindings(
-        <LogicalAction, Binding>{
-          for (final entry in json.entries)
-            if (LogicalAction.values.asNameMap().containsKey(entry.key))
-              LogicalAction.values.asNameMap()[entry.key]!:
-                  Binding.fromJson((entry.value as Map).cast<String, dynamic>()),
-        },
-      );
+  static Bindings fromJson(Map<String, dynamic> json) {
+    final parsed = <LogicalAction, Binding>{
+      for (final entry in json.entries)
+        if (LogicalAction.values.asNameMap().containsKey(entry.key))
+          LogicalAction.values.asNameMap()[entry.key]!: Binding.fromJson(
+            (entry.value as Map).cast<String, dynamic>(),
+          ),
+    };
+
+    // Profiles saved before a logical action existed would otherwise lose it.
+    // Only fill gaps: an explicit entry in the profile always wins.
+    for (final entry in <LogicalAction, Binding>{
+      ..._shared,
+      ..._drawingNode,
+    }.entries) {
+      parsed.putIfAbsent(entry.key, () => entry.value);
+    }
+
+    return Bindings(parsed);
+  }
 }

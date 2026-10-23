@@ -99,8 +99,9 @@ void main() {
   });
 
   group('pen and context', () {
-    testWidgets('Set pen sends the selected values and reports success',
-        (tester) async {
+    testWidgets('Set pen sends the selected values and reports success', (
+      tester,
+    ) async {
       await withApp(tester, (h) async {
         await openDrawing(tester);
         await scrollTo(tester, find.text('Pen'));
@@ -108,9 +109,9 @@ void main() {
         // Change the pen type so the request cannot pass by accident.
         await tester.tap(find.byType(DropdownButtonFormField<int>));
         await tester.pump();
-        await tester.tap(find.byType(DropdownMenuItem<int>).last);
+        await tester.tap(find.text('Tool 1 (1)').last);
         await tester.pump();
-        await tester.pumpAndSettle();
+        await tester.pump();
 
         await scrollTo(tester, find.text('Set pen'));
         await tester.tap(buttonFor('Set pen'));
@@ -167,15 +168,18 @@ void main() {
         await scrollTo(tester, drawButton);
         // Name and type are rendered as one two-line Text.
         expect(
-          find.text('/uas_draw/draw_picture\n'
-              'uas_draw_interfaces/action/DrawPicture'),
+          find.text(
+            '/uas_draw/draw_picture\n'
+            'uas_draw_interfaces/action/DrawPicture',
+          ),
           findsOneWidget,
         );
       });
     });
 
-    testWidgets('starting a goal offers cancel and then shows feedback',
-        (tester) async {
+    testWidgets('starting a goal offers cancel and then shows feedback', (
+      tester,
+    ) async {
       await withApp(tester, (h) async {
         await openDrawing(tester);
         await scrollTo(tester, drawButton);
@@ -210,8 +214,9 @@ void main() {
       });
     });
 
-    testWidgets('cancelling the goal returns to the idle state',
-        (tester) async {
+    testWidgets('cancelling the goal returns to the idle state', (
+      tester,
+    ) async {
       await withApp(tester, (h) async {
         await openDrawing(tester);
         await scrollTo(tester, drawButton);
@@ -248,55 +253,49 @@ void main() {
   });
 
   group('capability gating', () {
-    testWidgets('run control buttons are disabled without bindings',
-        (tester) async {
-      await withApp(
-        tester,
-        (h) async {
-          await openDrawing(tester);
-          await scrollTo(tester, find.text('Pause'));
-          for (final label in ['Pause', 'Resume', 'Cancel drawing']) {
-            expect(callbackOf(tester, buttonFor(label)), isNull,
-                reason: '$label must be gated on graph discovery');
-          }
-        },
-        bindings: unbound,
-      );
+    testWidgets('run control buttons are disabled without bindings', (
+      tester,
+    ) async {
+      await withApp(tester, (h) async {
+        await openDrawing(tester);
+        await scrollTo(tester, find.text('Pause'));
+        for (final label in ['Pause', 'Resume', 'Cancel drawing']) {
+          expect(
+            callbackOf(tester, buttonFor(label)),
+            isNull,
+            reason: '$label must be gated on graph discovery',
+          );
+        }
+      }, bindings: unbound);
     });
 
-    testWidgets('pressing a disabled control produces no status line',
-        (tester) async {
-      await withApp(
-        tester,
-        (h) async {
-          await openDrawing(tester);
-          await scrollTo(tester, find.text('Pause'));
-          await tester.tap(buttonFor('Pause'), warnIfMissed: false);
-          await tester.pump();
+    testWidgets('pressing a disabled control produces no status line', (
+      tester,
+    ) async {
+      await withApp(tester, (h) async {
+        await openDrawing(tester);
+        await scrollTo(tester, find.text('Pause'));
+        await tester.tap(buttonFor('Pause'), warnIfMissed: false);
+        await tester.pump();
 
-          expect(find.textContaining('Pause:'), findsNothing);
-        },
-        bindings: unbound,
-      );
+        expect(find.textContaining('Pause:'), findsNothing);
+      }, bindings: unbound);
     });
 
     testWidgets('SetPen and SetDrawingContext are gated too', (tester) async {
-      await withApp(
-        tester,
-        (h) async {
-          await openDrawing(tester);
-          await scrollTo(tester, find.text('Set pen'));
-          expect(callbackOf(tester, buttonFor('Set pen')), isNull);
-          await scrollTo(tester, find.text('Apply context'));
-          expect(callbackOf(tester, buttonFor('Apply context')), isNull);
-        },
-        bindings: unbound,
-      );
+      await withApp(tester, (h) async {
+        await openDrawing(tester);
+        await scrollTo(tester, find.text('Set pen'));
+        expect(callbackOf(tester, buttonFor('Set pen')), isNull);
+        await scrollTo(tester, find.text('Apply context'));
+        expect(callbackOf(tester, buttonFor('Apply context')), isNull);
+      }, bindings: unbound);
     });
   });
 
-  testWidgets('leaving the Drawing tab drops its subscriptions',
-      (tester) async {
+  testWidgets('leaving the Drawing tab drops its subscriptions', (
+    tester,
+  ) async {
     await withApp(tester, (h) async {
       await openDrawing(tester);
       expect(h.cm.client!.subscribed.keys, contains('/uas_draw/data'));
@@ -306,12 +305,16 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(h.cm.client!.subscribed.keys, isNot(contains('/uas_draw/data')));
-      expect(h.cm.client!.subscribed.keys, isNot(contains('/uas_draw/buffer_status')));
+      expect(
+        h.cm.client!.subscribed.keys,
+        isNot(contains('/uas_draw/buffer_status')),
+      );
     });
   });
 
-  testWidgets('the status card tracks /uas_draw/data and BufferStatus',
-      (tester) async {
+  testWidgets('the status card tracks /uas_draw/data and BufferStatus', (
+    tester,
+  ) async {
     await withApp(tester, (h) async {
       await openDrawing(tester);
       expect(find.textContaining('Waiting for data'), findsOneWidget);
@@ -328,6 +331,89 @@ void main() {
       );
       expect(find.textContaining('buffer free='), findsOneWidget);
       expect(find.textContaining('drawing=true'), findsOneWidget);
+    });
+  });
+
+  group('live canvas', () {
+    testWidgets('the width slider resizes the canvas', (tester) async {
+      await withApp(tester, (_) async {
+        await openDrawing(tester);
+        final slider = find.byKey(const Key('live-canvas-width'));
+        await scrollTo(tester, slider);
+
+        final canvas = find.byKey(const Key('live-canvas'));
+        final before = tester.getSize(canvas).width;
+        expect(before, greaterThan(200));
+
+        await tester.drag(slider, const Offset(-160, 0));
+        await tester.pump();
+
+        // Shrinking the canvas also shrinks the card, so jump back to the top
+        // before measuring the rebuilt canvas.
+        tester
+            .state<ScrollableState>(find.byType(Scrollable))
+            .position
+            .jumpTo(0);
+        await tester.pump();
+        expect(tester.getSize(canvas).width, lessThan(before));
+      });
+    });
+
+    testWidgets('draws points from the pen contact stream', (tester) async {
+      await withApp(tester, (h) async {
+        await openDrawing(tester);
+
+        expect(h.cm.client!.subscribed.keys, contains('/pen/contact'));
+        expect(find.textContaining('No contact yet'), findsOneWidget);
+
+        // The mock contact stream ticks every 100 ms.
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pump();
+
+        expect(h.trace.pointCount, greaterThan(0));
+        expect(h.trace.strokeCount, 1);
+        expect(find.textContaining('No contact yet'), findsNothing);
+        expect(find.textContaining('points'), findsOneWidget);
+      });
+    });
+
+    testWidgets('Clear empties the canvas but keeps listening', (tester) async {
+      await withApp(tester, (h) async {
+        await openDrawing(tester);
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pump();
+        expect(h.trace.pointCount, greaterThan(0));
+
+        await tester.tap(find.text('Clear'));
+        await tester.pump();
+
+        expect(h.trace.pointCount, 0);
+        expect(h.trace.strokeCount, 0);
+        expect(find.textContaining('0 points'), findsOneWidget);
+        expect(h.cm.client!.subscribed.keys, contains('/pen/contact'));
+      });
+    });
+
+    testWidgets('keeps recording after leaving the Drawing tab', (
+      tester,
+    ) async {
+      await withApp(tester, (h) async {
+        await openDrawing(tester);
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pump();
+        final before = h.trace.pointCount;
+        expect(before, greaterThan(0));
+
+        await tester.tap(find.text('About'));
+        await tester.pump();
+
+        // The screen's own data topics stop, but the app-level trace remains.
+        expect(h.cm.client!.subscribed.keys, contains('/pen/contact'));
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pump();
+
+        expect(h.trace.pointCount, greaterThan(before));
+      });
     });
   });
 }

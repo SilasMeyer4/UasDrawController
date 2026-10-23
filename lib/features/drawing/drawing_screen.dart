@@ -9,6 +9,8 @@ import '../../core/models/bindings.dart';
 import '../../core/rosbridge/ros_client.dart';
 import '../../core/services/connection_manager.dart';
 import '../../core/services/drawing_commands.dart';
+import '../../core/services/pen_trace_store.dart';
+import 'live_canvas.dart';
 
 /// Live view of `/uas_draw/data`, G-code upload, and the buttons that drive the
 /// `uas_draw_interfaces` services and the `DrawPicture` action.
@@ -66,6 +68,8 @@ class _DrawingScreenState extends State<DrawingScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final next = context.read<ConnectionManager>();
+    // The trace store is app-level so it keeps recording after leaving this tab.
+    context.read<PenTraceStore>().attach(next);
     if (identical(next, _cm)) return;
     _cm?.removeListener(_syncSubscription);
     _cm = next..addListener(_syncSubscription);
@@ -111,9 +115,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
     _dataTopic = topic;
     _subClient = client;
     _sub = client.messages.listen(_onMessage);
-    unawaited(
-      client.subscribe(topic, dataBinding!.type, throttleRate: 1000),
-    );
+    unawaited(client.subscribe(topic, dataBinding!.type, throttleRate: 1000));
 
     // Optional: the buffer gauge is a nice-to-have, not a reason to skip the
     // data subscription when the node does not publish it.
@@ -150,9 +152,8 @@ class _DrawingScreenState extends State<DrawingScreen> {
     }
 
     setState(() {
-      final position = _point(msg['position']) ??
-          _point(msg) ??
-          const <String, dynamic>{};
+      final position =
+          _point(msg['position']) ?? _point(msg) ?? const <String, dynamic>{};
       _x = _double(position['x']);
       _y = _double(position['y']);
       _z = _double(position['z']);
@@ -166,14 +167,15 @@ class _DrawingScreenState extends State<DrawingScreen> {
 
   static Map<String, dynamic>? _point(Object? raw) {
     if (raw is! Map<String, dynamic>) return null;
-    if (!raw.containsKey('x') && !raw.containsKey('y') && !raw.containsKey('z')) {
+    if (!raw.containsKey('x') &&
+        !raw.containsKey('y') &&
+        !raw.containsKey('z')) {
       return null;
     }
     return raw;
   }
 
-  static double _double(Object? value) =>
-      value is num ? value.toDouble() : 0;
+  static double _double(Object? value) => value is num ? value.toDouble() : 0;
 
   DrawingCommands? _commandsFor(ConnectionManager cm) {
     final client = cm.client;
@@ -261,8 +263,9 @@ class _DrawingScreenState extends State<DrawingScreen> {
       );
       final result = readUasResult(response);
       setState(() {
-        _status =
-            result.isSuccess ? 'G-code accepted' : 'G-code rejected by the ROS node';
+        _status = result.isSuccess
+            ? 'G-code accepted'
+            : 'G-code rejected by the ROS node';
         if (!result.isSuccess) _lastError = result.message;
       });
     } on RosServiceCallException catch (err) {
@@ -277,8 +280,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
     final cm = context.read<ConnectionManager>();
     final commands = _commandsFor(cm);
     if (commands == null) return;
-    await _run('Set pen', () async =>
-        (await commands.setPen(_pen)).summary);
+    await _run('Set pen', () async => (await commands.setPen(_pen)).summary);
   }
 
   Future<void> _applyContext() async {
@@ -290,8 +292,10 @@ class _DrawingScreenState extends State<DrawingScreen> {
       scalePicture: _scalePicture,
       pen: _pen,
     );
-    await _run('Apply context', () async =>
-        (await commands.setDrawingContext(context_)).summary);
+    await _run(
+      'Apply context',
+      () async => (await commands.setDrawingContext(context_)).summary,
+    );
   }
 
   Future<void> _setHome() async {
@@ -410,8 +414,13 @@ G00 X0 Y0 Z0
     }
 
     final binding = cm.profile?.bindings.get(LogicalAction.loadGcodeContent);
-    final canUpload = binding != null && cm.isAvailable(LogicalAction.loadGcodeContent);
+    final canUpload =
+        binding != null && cm.isAvailable(LogicalAction.loadGcodeContent);
     final topic = _dataBinding(cm)?.name ?? '(unbound)';
+    final trace = context.read<PenTraceStore>();
+    final contactBinding = cm.profile?.bindings.get(LogicalAction.penContact);
+    final contactAvailable =
+        contactBinding != null && cm.isAvailable(LogicalAction.penContact);
 
     return Scaffold(
       appBar: AppBar(
@@ -432,12 +441,23 @@ G00 X0 Y0 Z0
         children: [
           _statusCard(),
           const SizedBox(height: 16),
-          if (!cm.isAvailable(LogicalAction.loadGcodeContent))
-            const Text(
-              'The load_gcode_content service was not found in the ROS graph.',
-              style: TextStyle(color: Colors.orange),
-            ),
-          _uploadButtons(canUpload),
+          LiveCanvasCard(
+            store: trace,
+            binding: contactBinding,
+            topicAvailable: contactAvailable,
+          ),
+          const SizedBox(height: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!cm.isAvailable(LogicalAction.loadGcodeContent))
+                const Text(
+                  'The load_gcode_content service was not found in the ROS graph.',
+                  style: TextStyle(color: Colors.orange),
+                ),
+              _uploadButtons(canUpload),
+            ],
+          ),
           const SizedBox(height: 24),
           _penSection(cm),
           const SizedBox(height: 16),
@@ -537,7 +557,8 @@ G00 X0 Y0 Z0
               min: 0.1,
               max: 20,
               unit: 'cm',
-              onChanged: (v) => setState(() => _pen = _pen.copyWith(lengthInCm: v)),
+              onChanged: (v) =>
+                  setState(() => _pen = _pen.copyWith(lengthInCm: v)),
             ),
           ],
         ),
@@ -630,7 +651,8 @@ G00 X0 Y0 Z0
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Run control', style: Theme.of(context).textTheme.titleSmall),
+              Text('Run control',
+                  style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -682,13 +704,15 @@ G00 X0 Y0 Z0
     final cm = context.read<ConnectionManager>();
     final commands = _commandsFor(cm);
     if (commands == null) return;
-    await _run(label, () async => switch (action) {
-          LogicalAction.pause => (await commands.pause()).summary,
-          LogicalAction.resume => (await commands.resume()).summary,
-          LogicalAction.cancelDrawing =>
-            (await commands.cancelDrawing()).summary,
-          _ => 'not a run-control command',
-        });
+    await _run(
+      label,
+      () async => switch (action) {
+        LogicalAction.pause => (await commands.pause()).summary,
+        LogicalAction.resume => (await commands.resume()).summary,
+        LogicalAction.cancelDrawing => (await commands.cancelDrawing()).summary,
+        _ => 'not a run-control command',
+      },
+    );
   }
 
   /// The `DrawPicture` action: progress from feedback, abort via `action_cancel`.

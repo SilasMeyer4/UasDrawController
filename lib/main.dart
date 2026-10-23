@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'core/services/connection_manager.dart';
 import 'core/services/log_store.dart';
+import 'core/services/pen_trace_store.dart';
 import 'core/services/profile_store.dart';
 import 'app/app.dart';
 
@@ -21,6 +23,9 @@ class UasDrawApp extends StatelessWidget {
         // One store for the whole app: the /rosout tail keeps filling while
         // the user is on another tab.
         ChangeNotifierProvider(create: (_) => LogStore()),
+        // The pen trace also belongs to the app, not the Drawing tab: it keeps
+        // recording while the user inspects diagnostics or the flight view.
+        ChangeNotifierProvider(create: (_) => PenTraceStore()),
         Provider(create: (_) => ProfileStore()),
       ],
       child: MaterialApp.router(

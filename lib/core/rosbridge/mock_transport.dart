@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'ros_transport.dart';
 
@@ -15,10 +16,10 @@ class MockTransport implements RosTransport {
 
   final StreamController<dynamic> _incoming =
       StreamController<dynamic>.broadcast();
-  final StreamController<String> _errors =
-      StreamController<String>.broadcast();
+  final StreamController<String> _errors = StreamController<String>.broadcast();
   final Set<String> _subscribed = <String>{};
   final Set<String> _advertised = <String>{};
+
   /// Goals that were asked to stop and whose next feedback tick must be turned
   /// into a cancelled result instead.
   final Set<String> _cancelledGoals = <String>{};
@@ -27,6 +28,7 @@ class MockTransport implements RosTransport {
   Timer? _dataTimer;
   Timer? _bufferTimer;
   Timer? _rosoutTimer;
+  Timer? _contactTimer;
 
   /// Every frame the client sent, in order. Useful in tests.
   final List<Map<String, dynamic>> sentOps = <Map<String, dynamic>>[];
@@ -48,7 +50,11 @@ class MockTransport implements RosTransport {
     _advertised.clear();
     _cancelledGoals.clear();
     sentOps.clear();
-    _emit(<String, dynamic>{'op': 'status', 'level': 'info', 'message': 'mock rosbridge ready'});
+    _emit(<String, dynamic>{
+      'op': 'status',
+      'level': 'info',
+      'message': 'mock rosbridge ready',
+    });
   }
 
   @override
@@ -109,7 +115,9 @@ class MockTransport implements RosTransport {
         final topic = op['topic'];
         if (topic is! String) return;
         if (!_advertised.contains(topic)) {
-          _emitError("rosbridge[warning]: publish: topic '$topic' is not advertised");
+          _emitError(
+            "rosbridge[warning]: publish: topic '$topic' is not advertised",
+          );
         }
       case 'action_goal':
         _startGoal(op);
@@ -306,7 +314,10 @@ class MockTransport implements RosTransport {
         'op': 'publish',
         'topic': '/mavros/battery',
         'msg': <String, dynamic>{
-          'header': <String, dynamic>{'stamp': <String, dynamic>{'sec': 0, 'nanosec': 0}, 'frame_id': ''},
+          'header': <String, dynamic>{
+            'stamp': <String, dynamic>{'sec': 0, 'nanosec': 0},
+            'frame_id': '',
+          },
           'voltage': 14.8,
           'current': 2.5,
           'charge': -1.0,
@@ -355,6 +366,65 @@ class MockTransport implements RosTransport {
       });
     });
 
+    // A short pen trace across the wall, enough to exercise the live canvas
+    // offline. The names are scoped exactly like Gazebo reports them.
+    var contactTick = 0;
+    _contactTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      final tick = contactTick % 120;
+      contactTick++;
+      if (tick == 0 && contactTick > 1) {
+        // Publish an explicit lift between passes so the trace does not join
+        // the end of one sweep to the start of the next.
+        _forward(<String, dynamic>{
+          'op': 'publish',
+          'topic': '/pen/contact',
+          'msg': <String, dynamic>{
+            'header': <String, dynamic>{
+              'stamp': <String, dynamic>{'sec': 0, 'nanosec': 0},
+              'frame_id': '',
+            },
+            'contacts': const <Object>[],
+          },
+        });
+        return;
+      }
+      final phase = tick / 120.0;
+      final y = -1.4 + 2.8 * phase;
+      final z = 1.5 + 0.6 * math.sin(phase * math.pi * 2);
+      _forward(<String, dynamic>{
+        'op': 'publish',
+        'topic': '/pen/contact',
+        'msg': <String, dynamic>{
+          'header': <String, dynamic>{
+            'stamp': <String, dynamic>{'sec': 0, 'nanosec': 0},
+            'frame_id': '',
+          },
+          'contacts': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'collision1': <String, dynamic>{
+                'id': 1,
+                'name': 'x500_uas_draw::pen_link::pen_tip_collision',
+                'type': 5,
+              },
+              'collision2': <String, dynamic>{
+                'id': 2,
+                'name': 'drawing_wall::wall_link::wall_collision',
+                'type': 5,
+              },
+              'positions': <Map<String, dynamic>>[
+                <String, dynamic>{'x': 2.95, 'y': y, 'z': z},
+              ],
+              'normals': <Map<String, dynamic>>[
+                <String, dynamic>{'x': -1.0, 'y': 0.0, 'z': 0.0},
+              ],
+              'depths': <double>[0.001],
+              'wrenches': const <Object>[],
+            },
+          ],
+        },
+      });
+    });
+
     // Stand-in for /rosout: cycles through a few severities so the log tail has
     // something with colour in it.
     var tick = 0;
@@ -379,10 +449,26 @@ class MockTransport implements RosTransport {
 
   static const List<({int level, String node, String text})> _fakeLogs =
       <({int level, String node, String text})>[
-    (level: 20, node: '/uas_draw/gcode_interpreter', text: 'G-code loaded, 7 commands'),
-    (level: 30, node: '/uas_draw/gcode_interpreter', text: 'M00 reached, holding for operator'),
-    (level: 20, node: '/UasDraw/safety', text: 'offboard setpoint stream nominal'),
-    (level: 40, node: '/uas_draw/gcode_interpreter', text: 'buffer underrun, line 42 stalled'),
+    (
+      level: 20,
+      node: '/uas_draw/gcode_interpreter',
+      text: 'G-code loaded, 7 commands',
+    ),
+    (
+      level: 30,
+      node: '/uas_draw/gcode_interpreter',
+      text: 'M00 reached, holding for operator',
+    ),
+    (
+      level: 20,
+      node: '/UasDraw/safety',
+      text: 'offboard setpoint stream nominal',
+    ),
+    (
+      level: 40,
+      node: '/uas_draw/gcode_interpreter',
+      text: 'buffer underrun, line 42 stalled',
+    ),
     (level: 20, node: '/mavros', text: 'connected to 192.168.1.10:14550'),
   ];
 
@@ -391,10 +477,12 @@ class MockTransport implements RosTransport {
     _dataTimer?.cancel();
     _bufferTimer?.cancel();
     _rosoutTimer?.cancel();
+    _contactTimer?.cancel();
     _batteryTimer = null;
     _dataTimer = null;
     _bufferTimer = null;
     _rosoutTimer = null;
+    _contactTimer = null;
   }
 
   void _forward(Map<String, dynamic> frame) {
@@ -415,6 +503,7 @@ class MockTransport implements RosTransport {
     '/rosout': 'rcl_interfaces/msg/Log',
     '/uas_draw/data': 'uas_draw_interfaces/msg/UasDrawDataBlock',
     '/uas_draw/buffer_status': 'uas_draw_interfaces/msg/BufferStatus',
+    '/pen/contact': 'ros_gz_interfaces/msg/Contacts',
     '/UasDraw/joy': 'sensor_msgs/msg/Joy',
     '/mavros/battery': 'mavros_msgs/msg/BatteryState',
     '/mavros/state': 'mavros_msgs/msg/State',
@@ -499,6 +588,16 @@ String rosdrvFor(String type) => switch (type) {
       'sensor_msgs/msg/Joy' => 'std_msgs/Header header\n'
           'float32[] axes\n'
           'int32[] buttons\n',
+      'ros_gz_interfaces/msg/Contacts' => 'std_msgs/Header header\n'
+          'ros_gz_interfaces/Contact[] contacts\n',
+      'ros_gz_interfaces/Contact' => 'ros_gz_interfaces/Entity collision1\n'
+          'ros_gz_interfaces/Entity collision2\n'
+          'geometry_msgs/Vector3[] positions\n'
+          'geometry_msgs/Vector3[] normals\n'
+          'float64[] depths\n',
+      'ros_gz_interfaces/Entity' => 'uint64 id\n'
+          'string name\n'
+          'uint8 type\n',
       'geometry_msgs/msg/Point' => 'float64 x\n'
           'float64 y\n'
           'float64 z\n',

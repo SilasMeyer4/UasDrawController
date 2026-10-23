@@ -20,8 +20,11 @@ void main() {
     test('introspection uses /rosapi/* names', () async {
       final graph = await client.fetchGraph();
       expect(graph.topics.keys, contains('/uas_draw/data'));
-      expect(graph.topics['/uas_draw/data'],
-          'uas_draw_interfaces/msg/UasDrawDataBlock');
+      expect(
+        graph.topics['/uas_draw/data'],
+        'uas_draw_interfaces/msg/UasDrawDataBlock',
+      );
+      expect(graph.topics['/pen/contact'], 'ros_gz_interfaces/msg/Contacts');
       expect(graph.services.keys, contains('/UasDraw/arm'));
       expect(graph.services['/UasDraw/arm'], 'std_srvs/srv/Trigger');
       expect(graph.nodes, contains('/rosapi'));
@@ -33,13 +36,17 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       // No advertise: the mock must refuse, exactly like rosbridge does.
-      await client.publish('/UasDraw/joy', <String, dynamic>{'axes': <double>[]});
+      await client.publish('/UasDraw/joy', <String, dynamic>{
+        'axes': <double>[],
+      });
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(received, isEmpty);
       final errors = <String>[];
       final errorSub = client.errors.listen(errors.add);
-      await client.publish('/UasDraw/joy', <String, dynamic>{'axes': <double>[]});
+      await client.publish('/UasDraw/joy', <String, dynamic>{
+        'axes': <double>[],
+      });
       await Future<void>.delayed(Duration.zero);
       await errorSub.cancel();
       await sub.cancel();
@@ -47,10 +54,16 @@ void main() {
     });
 
     test('advertise makes the publish accepted', () async {
-      await client.publish('/UasDraw/joy', <String, dynamic>{'axes': <double>[]},
+      await client.publish(
+          '/UasDraw/joy',
+          <String, dynamic>{
+            'axes': <double>[],
+          },
           type: 'sensor_msgs/msg/Joy');
-      expect(transport.sentOps.map((f) => f['op']),
-          containsAllInOrder(<String>['advertise', 'publish']));
+      expect(
+        transport.sentOps.map((f) => f['op']),
+        containsAllInOrder(<String>['advertise', 'publish']),
+      );
     });
 
     test('unsubscribed topics are not forwarded', () async {
@@ -63,25 +76,59 @@ void main() {
       expect(received.every((f) => f['topic'] == '/mavros/battery'), isTrue);
     });
 
-    test('a subscribed drawing topic delivers UasDrawDataBlock frames', () async {
-      await client.subscribe('/uas_draw/data',
-          'uas_draw_interfaces/msg/UasDrawDataBlock');
+    test(
+      'a subscribed drawing topic delivers UasDrawDataBlock frames',
+      () async {
+        await client.subscribe(
+          '/uas_draw/data',
+          'uas_draw_interfaces/msg/UasDrawDataBlock',
+        );
+        final received = <Map<String, dynamic>>[];
+        final sub = client.messages.listen(received.add);
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        await sub.cancel();
+        expect(received, isNotEmpty);
+        final msg = received.first['msg'] as Map<String, dynamic>;
+        // UasDrawDataBlock nests a geometry_msgs/Point; the app must see that.
+        expect(msg['position'], isA<Map<String, dynamic>>());
+        expect((msg['position'] as Map<String, dynamic>)['x'], isA<num>());
+        expect(msg['is_drawing'], isA<bool>());
+      },
+    );
+
+    test('a subscribed contact topic delivers pen/wall contacts', () async {
+      await client.subscribe('/pen/contact', 'ros_gz_interfaces/msg/Contacts');
       final received = <Map<String, dynamic>>[];
       final sub = client.messages.listen(received.add);
-      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      await Future<void>.delayed(const Duration(milliseconds: 250));
       await sub.cancel();
       expect(received, isNotEmpty);
+
       final msg = received.first['msg'] as Map<String, dynamic>;
-      // UasDrawDataBlock nests a geometry_msgs/Point; the app must see that.
-      expect(msg['position'], isA<Map<String, dynamic>>());
-      expect((msg['position'] as Map<String, dynamic>)['x'], isA<num>());
-      expect(msg['is_drawing'], isA<bool>());
+      final contacts = msg['contacts'] as List<dynamic>;
+      expect(contacts, isNotEmpty);
+      final contact = contacts.first as Map<String, dynamic>;
+      expect(
+        (contact['collision1'] as Map<String, dynamic>)['name'],
+        contains('pen_tip_collision'),
+      );
+      expect(
+        (contact['collision2'] as Map<String, dynamic>)['name'],
+        contains('wall_collision'),
+      );
+      final position =
+          (contact['positions'] as List<dynamic>).first as Map<String, dynamic>;
+      expect(position['y'], isA<num>());
+      expect(position['z'], isA<num>());
     });
 
     test('unknown service reports failure instead of fake success', () async {
       await expectLater(
-        client.callService('/does/not/exist', 'std_srvs/srv/Trigger',
-            <String, dynamic>{}),
+        client.callService(
+          '/does/not/exist',
+          'std_srvs/srv/Trigger',
+          <String, dynamic>{},
+        ),
         throwsA(isA<RosServiceCallException>()),
       );
     });
@@ -103,8 +150,8 @@ void main() {
         'uas_draw_interfaces/srv/LoadGCodeContent',
         <String, dynamic>{'content': '   '},
       );
-      final result = (response['values'] as Map<String, dynamic>)['operation_result']
-          as Map<String, dynamic>;
+      final result = (response['values']
+          as Map<String, dynamic>)['operation_result'] as Map<String, dynamic>;
       expect(result['was_successful'], isFalse);
       expect(result['message'], contains('empty'));
     });
@@ -122,7 +169,11 @@ void main() {
       final received = <Map<String, dynamic>>[];
       final sub = client.messages.listen(received.add);
       await client.subscribe('/UasDraw/joy', 'sensor_msgs/msg/Joy');
-      await client.publish('/UasDraw/joy', <String, dynamic>{'axes': <double>[0.1]},
+      await client.publish(
+          '/UasDraw/joy',
+          <String, dynamic>{
+            'axes': <double>[0.1],
+          },
           type: 'sensor_msgs/msg/Joy');
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await sub.cancel();
@@ -134,6 +185,10 @@ void main() {
     test('knows the interfaces the app uses', () {
       expect(rosdrvFor('std_srvs/srv/Trigger'), contains('---'));
       expect(rosdrvFor('geometry_msgs/msg/Point'), contains('float64 x'));
+      expect(
+        rosdrvFor('ros_gz_interfaces/msg/Contacts'),
+        contains('ros_gz_interfaces/Contact[] contacts'),
+      );
       expect(rosdrvFor('nope/msg/Nope'), isEmpty);
     });
   });
